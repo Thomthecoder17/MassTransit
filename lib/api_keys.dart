@@ -1,3 +1,3 @@
 class ApiKeys {
-  static const String mapTiler = 'UU5VpZ95QdzJL8ppRQGO';
+  static const String mapTiler = 'ADD_API_KEY';
 }
