@@ -1,4 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'api_keys.dart';
 
 void main() {
   runApp(const MyApp());
@@ -28,7 +34,7 @@ class MyApp extends StatelessWidget {
         //
         // This works for code too, not just values: Most code changes can be
         // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
       ),
       home: const MyHomePage(title: 'Flutter Demo Home Page'),
     );
@@ -57,16 +63,39 @@ class _MyHomePageState extends State<MyHomePage>
     with SingleTickerProviderStateMixin {
   late final AnimationController _sheetController;
 
+  late final MapController _mapController;
+
+  final double _minSheetSize = 0.2;
+  double? _sheetSize;
+
+  LatLng? _currentLocation;
+
   @override
   void initState() {
-    super.initState();
+    _sheetSize = _minSheetSize;
     _sheetController = BottomSheet.createAnimationController(this);
+    _mapController = MapController();
+    _getCurrentLocation();
+    super.initState(); //Fix map not centering on current location
   }
 
   @override
   void dispose() {
     _sheetController.dispose();
     super.dispose();
+  }
+
+  Future<void> _getCurrentLocation() async {
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      setState(() {
+        _currentLocation = LatLng(position.latitude, position.longitude);
+      });
+    } catch (e) {
+      print('Error getting location: $e');
+    }
   }
 
   @override
@@ -77,39 +106,116 @@ class _MyHomePageState extends State<MyHomePage>
     // The Flutter framework has been optimized to make rerunning build methods
     // fast, so that you can just rebuild anything that needs updating rather
     // than having to individually change instances of widgets.
+    if (_currentLocation == null) {
+      return Center(child: SpinKitPulse(color: Theme.of(context).primaryColor));
+    }
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
       body: Stack(
         children: [
-          Positioned.fill(child: Text('map goes here')),
-          DraggableScrollableSheet(
-            initialChildSize: 0.3,
-            minChildSize: 0.1,
-            maxChildSize: 1.0,
-            builder: (context, scrollController) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.inversePrimary,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
-                ),
-                child: ListView(
-                  controller: scrollController,
-                  children: [
-                    Center(
-                      child: Text('lines go here'),
-                    )
-                  ],
-                )
-              );
+          Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              height:
+                  MediaQuery.of(context).size.height * (1.0 - _sheetSize!) + 25,
+              child:
+              Stack(
+                children: [
+                  FlutterMap(
+                    mapController: _mapController,
+                    options: MapOptions(
+                      initialCenter: _currentLocation!,
+                      initialZoom: 10,
+                      interactionOptions: const InteractionOptions(
+                        flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                      ), //disables rotation
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            'https://api.maptiler.com/maps/basic-v2-light/{z}/{x}/{y}.png?key=${ApiKeys.mapTiler}',
+                      ),
+                      Transform.translate(
+                        offset: Offset(0, MediaQuery.of(context).systemGestureInsets.bottom - 20), //Flutter weirdly adds a bottom padding the height of the nav bar to the safe area. This causes a nav bar level of space to be put between the sheet and the attributes. The 20px is cause it got partially hidden when I tried fixing it this way.
+                        child: RichAttributionWidget(
+                          // Include a stylish prebuilt attribution widget that meets all requirements
+                          attributions: [
+                            LogoSourceAttribution(
+                              Image.network(
+                                'https://media.maptiler.com/old/mediakit/logo/maptiler-logo.png',
+                              ),
+                              onTap:
+                                  () => launchUrl(
+                                    Uri.parse('https://www.maptiler.com'),
+                                  ),
+                            ),
+                            TextSourceAttribution(
+                              'MapTiler',
+                              onTap:
+                                  () => launchUrl(
+                                    Uri.parse(
+                                      'https://www.maptiler.com/copyright',
+                                    ),
+                                  ),
+                            ),
+                            TextSourceAttribution(
+                              'OpenStreetMap contributors',
+                              onTap:
+                                  () => launchUrl(
+                                    Uri.parse(
+                                      'https://openstreetmap.org/copyright',
+                                    ),
+                                  ),
+                            ),
+                          ],
+                          showFlutterMapAttribution: false,
+                          alignment: AttributionAlignment.bottomRight,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Center(
+                    child: Container(
+                      width: 13,
+                      height: 13,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).primaryColor.withAlpha(150),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.black, width: 1),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          NotificationListener<DraggableScrollableNotification>(
+            onNotification: (notification) {
+              setState(() {
+                _sheetSize = notification.extent;
+              });
+              return true;
             },
+            child: DraggableScrollableSheet(
+              initialChildSize: _minSheetSize,
+              minChildSize: _minSheetSize,
+              maxChildSize: 1.0,
+              builder: (context, scrollController) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.inversePrimary,
+                    borderRadius: //Maybe add an animation here for when you do scroll it to the top
+                        _sheetSize == 1.0
+                            ? BorderRadius.zero
+                            : BorderRadius.vertical(top: Radius.circular(25)),
+                  ),
+                  child: ListView(
+                    controller: scrollController,
+                    children: [Center(child: Text('lines go here'))],
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
