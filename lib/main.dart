@@ -2,12 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:mass_transit/nearby_transit_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'api_keys.dart';
+import 'constants.dart';
+import 'package:graphql_flutter/graphql_flutter.dart';
+import 'package:timezone/data/latest.dart' as tzdata;
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initHiveForFlutter();
+
+  final HttpLink httpLink = HttpLink(Constants.otpUrl);
+
+  ValueNotifier<GraphQLClient> client = ValueNotifier(
+    GraphQLClient(
+      link: httpLink,
+      cache: GraphQLCache(store: InMemoryStore()),
+    ),
+  );
+
+  tzdata.initializeTimeZones(); // Initialize timezone database
+
+  runApp(
+    GraphQLProvider(
+      client: client,
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -65,6 +87,9 @@ class _MyHomePageState extends State<MyHomePage>
 
   late final MapController _mapController;
 
+  double? lat;
+  double? lon;
+
   final double _minSheetSize = 0.2;
   double? _sheetSize;
 
@@ -76,7 +101,17 @@ class _MyHomePageState extends State<MyHomePage>
     _sheetController = BottomSheet.createAnimationController(this);
     _mapController = MapController();
     _getCurrentLocation();
-    super.initState(); //Fix map not centering on current location
+    super.initState();
+
+    _mapController.mapEventStream.listen((event) {
+      if (event is MapEventMoveEnd) {
+        // Update the nearby transit list when the map stops moving
+        setState(() {
+          lat = _mapController.camera.center.latitude;
+          lon = _mapController.camera.center.longitude;
+        });
+      }
+    });
   }
 
   @override
@@ -94,7 +129,7 @@ class _MyHomePageState extends State<MyHomePage>
         _currentLocation = LatLng(position.latitude, position.longitude);
       });
     } catch (e) {
-      print('Error getting location: $e');
+      debugPrint('Error getting location: $e');
     }
   }
 
@@ -132,7 +167,19 @@ class _MyHomePageState extends State<MyHomePage>
                     children: [
                       TileLayer(
                         urlTemplate:
-                            'https://api.maptiler.com/maps/basic-v2-light/{z}/{x}/{y}.png?key=${ApiKeys.mapTiler}',
+                            'https://api.maptiler.com/maps/basic-v2-light/{z}/{x}/{y}.png?key=${Constants.mapTilerKey}',
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: _currentLocation!,
+                            child: Icon(
+                              Icons.location_on,
+                              color: Colors.red,
+                              size: 40,
+                            ),
+                          ),
+                        ],
                       ),
                       Transform.translate(
                         offset: Offset(0, MediaQuery.of(context).systemGestureInsets.bottom - 20), //Flutter weirdly adds a bottom padding the height of the nav bar to the safe area. This causes a nav bar level of space to be put between the sheet and the attributes. The 20px is cause it got partially hidden when I tried fixing it this way.
@@ -209,10 +256,18 @@ class _MyHomePageState extends State<MyHomePage>
                             ? BorderRadius.zero
                             : BorderRadius.vertical(top: Radius.circular(25)),
                   ),
-                  child: ListView(
-                    controller: scrollController,
-                    children: [Center(child: Text('lines go here'))],
-                  ),
+                  child:
+                      lat != null && lon != null
+                        ? NearbyTransitList(
+                            latitude: lat!,
+                            longitude: lon!,
+                            scrollController: scrollController,
+                          )
+                        : Center(
+                            child: SpinKitPulse(
+                              color: Theme.of(context).primaryColor,
+                            ),
+                          ),
                 );
               },
             ),
