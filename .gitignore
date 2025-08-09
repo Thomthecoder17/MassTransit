@@ -36,7 +36,7 @@ migrate_working_dir/
 # Symbolication related
 app.*.symbols
 
-*/lib/api_keys.dart
+*/lib/constants.dart
 
 # Obfuscation related
 app.*.map.json
