@@ -1,3 +1,5 @@
+<img width="1920" height="274" alt="MassTransit" src="https://github.com/user-attachments/assets/34e4bb35-0486-4d45-98e5-9be73c1a40ce" />
+
 # MassTransit
 
 ## Description:
