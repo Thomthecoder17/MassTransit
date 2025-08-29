@@ -105,12 +105,12 @@ class _NearbyTransitListState extends State<NearbyTransitList> {
 
 
             return ListTile(
-              title: Text(displayName ?? ''),
+              title: Text(displayName),
               subtitle: Text(pattern['headsign'] ?? ''),
               trailing: Column(
                 children: [
                   Text(
-                      '$minTillDeparture' ?? '',
+                      '$minTillDeparture',
                   style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,

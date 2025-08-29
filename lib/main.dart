@@ -174,9 +174,9 @@ class _MyHomePageState extends State<MyHomePage>
                           Marker(
                             point: _currentLocation!,
                             child: Icon(
-                              Icons.location_on,
-                              color: Colors.red,
-                              size: 40,
+                              Icons.circle,
+                              color: Colors.blue,
+                              size: 13,
                             ),
                           ),
                         ],
